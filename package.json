@@ -2,8 +2,22 @@
   "name": "stealth-payment-cli",
   "module": "index.ts",
   "type": "module",
+  "scripts": {
+    "build": "tsc",
+    "cli": "bun run src/cli.ts"
+  },
+  "dependencies": {
+    "@noble/curves": "^1.2.0",
+    "@noble/hashes": "^1.3.2",
+    "commander": "^13.1.0",
+    "ethers": "^6.13.5",
+    "inquirer": "^12.4.1",
+    "readline-sync": "^1.4.10",
+    "serve": "^14.2.4"
+  },
   "devDependencies": {
-    "@types/bun": "latest"
+    "@types/bun": "latest",
+    "@types/readline-sync": "^1.4.8"
   },
   "peerDependencies": {
     "typescript": "^5.0.0"
