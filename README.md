@@ -14,7 +14,7 @@ Before using this CLI, ensure you have:
 - [Bun](https://bun.sh/) installed
 - Node.js **v18+** (Bun includes Node compatibility)
 - An Ethereum-compatible wallet with some ETH for gas fees
-- Access to an Ethereum RPC provider (Infura, Alchemy, or self-hosted node)
+- Access to an Ethereum RPC provider
 
 ## 🔧 Installation
 ```sh
@@ -28,7 +28,7 @@ bun install
 
 ## 🚀 Getting Started
 
-### ** Add execution permission to the script **
+###  Add execution permission to the script if you want to run as ./cli.ts 
 ```sh
 chmod +x cli.ts
 ```
