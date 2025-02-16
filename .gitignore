@@ -129,4 +129,31 @@ dist
 .yarn/install-state.gz
 .pnp.*
 
+# Circuit build artifacts
+*.ptau
+*.zkey
+*_js/
+*_cpp/
+*.r1cs
+*.sym
+*.wasm
+
+# Private keys and configs
+.env
+config.json
+**/encrypted-config.json
+*wallet.json
+*private*.json
+*secret*.json
+
+# Temporary proof files
+src/input.json
+src/proof.json
+src/public.json
+src/witness.wtns
+src/*.wtns
+
+# IDE and system files
 .DS_Store
+.vscode/
+.idea/

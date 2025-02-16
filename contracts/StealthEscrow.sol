@@ -89,3 +89,101 @@ contract StealthEscrow {
         return ecrecover(messageHash, v, r, s);
     }
 }
+// SPDX-License-Identifier: MIT
+pragma solidity ^0.8.28;
+
+import "./Verifier.sol";
+
+contract StealthEscrow {
+    Groth16Verifier public verifier;
+
+    // Core state variables
+    mapping(bytes32 => uint256) public commitments;
+    mapping(bytes32 => bool) public nullifiersUsed;
+
+    // Events
+    event EtherDeposited(
+        uint256 commitment,
+        uint256 amount,
+        bytes ephemeralPubKey
+    );
+    event EtherClaimed(address indexed recipient, uint256 amount);
+
+    // Custom errors
+    error InvalidVerifier();
+    error NoEthSent();
+    error CommitmentExists();
+    error CommitmentNotFound();
+    error NullifierUsed();
+    error InvalidProof();
+    error TransferFailed();
+
+    /**
+     * @notice Constructor to set the Verifier contract address
+     * @param _verifier The deployed Verifier contract address
+     */
+    constructor(address _verifier) {
+        require(_verifier != address(0), InvalidVerifier);
+        verifier = Groth16Verifier(_verifier);
+    }
+
+    /**
+     * @notice Deposit ETH into the escrow using a commitment
+     * @param commitment The zk-SNARK commitment hash
+     * @param ephemeralPubKey The sender's ephemeral public key
+     */
+    function deposit(
+        uint256 commitment,
+        bytes calldata ephemeralPubKey
+    ) external payable {
+        require(msg.value > 0, NoEthSent());
+        bytes32 commitmentKey = bytes32(commitment);
+        require(commitments[commitmentKey] == 0, CommitmentExists());
+
+        commitments[commitmentKey] = msg.value;
+        emit EtherDeposited(commitment, msg.value, ephemeralPubKey);
+    }
+
+    /**
+     * @notice Claim ETH using a zk-SNARK proof
+     * @param a zk-SNARK proof parameter
+     * @param b zk-SNARK proof parameter
+     * @param c zk-SNARK proof parameter
+     * @param publicSignals Public inputs: [nullifier, commitment]
+     * @param recipient Address to receive the funds
+     */
+    function claim(
+        uint256[2] calldata a,
+        uint256[2][2] calldata b,
+        uint256[2] calldata c,
+        uint256[2] calldata publicSignals,
+        address recipient
+    ) external {
+        bytes32 commitment = bytes32(publicSignals[0]);
+        bytes32 nullifier = bytes32(publicSignals[1]);
+
+        require(commitments[commitment] > 0, CommitmentNotFound());
+        require(!nullifiersUsed[nullifier], NullifierUsed);
+        require(verifier.verifyProof(a, b, c, publicSignals), InvalidProof);
+
+        uint256 amount = commitments[commitment];
+        commitments[commitment] = 0;
+        nullifiersUsed[nullifier] = true;
+
+        (bool success, ) = recipient.call{value: amount}("");
+        require(success, TransferFailed);
+
+        emit EtherClaimed(recipient, amount);
+    }
+
+    // Add view function to check stored commitment
+    function getStoredAmount(uint256 commitment) public view returns (uint256) {
+        bytes32 key = bytes32(commitment);
+        return commitments[key];
+    }
+
+    // Make consistent with how we check in claim()
+    function hasCommitment(uint256 commitment) public view returns (bool) {
+        return commitments[bytes32(commitment)] > 0;
+    }
+}
