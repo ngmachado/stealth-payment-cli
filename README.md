@@ -200,7 +200,6 @@ This project is licensed under the **MIT License**.
 
 ### **🔗 Useful Resources**
 - [Bun Documentation](https://bun.sh/docs)
-- [Ethereum ECDH Key Exchange](https://eips.ethereum.org/EIPS/eip-1108)
 - [snarkjs Library](https://github.com/iden3/snarkjs)
 
 ---
