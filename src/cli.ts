@@ -129,7 +129,7 @@ async function generateProof(secret: string, commitment: string): Promise<ProofR
 
         return { proof, publicSignals };
     } catch (error) {
-        console.error(chalk.red("❌ Failed to generate proof:", error));
+        console.error(chalk.red("❌ Failed to generate proof:"), error);
         throw error; // Better to throw than exit
     } finally {
         // Enable file cleanup in production
@@ -152,7 +152,7 @@ async function claimFunds(commitment: string, ephemeralPubKey: string): Promise<
     console.log(chalk.blue("🔑 Claiming funds..."));
     const commitmentBigInt = BigInt(commitment);
     try {
-        // Remove hardcoded relayer key
+
         const { relayerKey, recipient } = await inquirer.prompt([
             { type: "password", name: "relayerKey", message: "🔑 Enter relayer private key:" },
             { type: "input", name: "recipient", message: "Enter recipient address:" }
@@ -294,42 +294,57 @@ async function depositETH(recipient: string, amount: string): Promise<void> {
     await ensureSetup();
     safeLog("Starting ETH deposit process", { recipient, amount });
 
+    // 🔹 Step 1: Retrieve Recipient's Public Key
     const recipientPublicKey = await carrierContract.getPublicKey(recipient);
     safeLog("Retrieved recipient's public key");
 
-    // Generate ephemeral key pair
-    const r = secp.secp256k1.utils.randomPrivateKey();
+    // 🔹 Step 2: Generate Ephemeral Key Pair
+    const ephemeralPrivateKey = secp.secp256k1.utils.randomPrivateKey();
     safeLog("Generated ephemeral keypair");
 
-    const ephemeralPublicKey = secp.secp256k1.getPublicKey(r, true);
+    const ephemeralPublicKey = secp.secp256k1.getPublicKey(ephemeralPrivateKey, true);
     const recipientPubKeyBytes = ethers.getBytes(recipientPublicKey);
-    // Compute shared secret (ECDH)
+
+    // 🔹 Step 3: Compute Shared Secret (ECDH)
     const sharedSecret = secp.secp256k1.getSharedSecret(
-        r, // Sender's ephemeral private key
-        recipientPubKeyBytes,  // Recipient's registered public key
-        true // Return compressed public key
+        ephemeralPrivateKey,  // Sender's ephemeral private key
+        recipientPubKeyBytes,  // Receiver's registered public key
+        true                  // Return compressed public key
     );
 
-    // Extract only the X-coordinate
+    // Extract only the X-coordinate from the shared secret
     const sharedSecretX = BigInt("0x" + Buffer.from(sharedSecret.slice(1, 33)).toString("hex")) % FIELD_SIZE;
 
-    // Use the sharedSecretX instead of raw sharedSecret
-    const safeSharedSecret = poseidon.hash([sharedSecretX]);
+    // Compute Stealth Public Key
+    const hashedSecret = poseidon.hash([sharedSecretX]); // Secure hashing function
 
-    // Compute commitment deterministically
-    const commitment = poseidon.hash([safeSharedSecret]);  // Just hash the secret, matching circuit
+    // Compute pub_once = hash(shared) * G + pub_r
+    const stealthPubKey = secp.secp256k1.ProjectivePoint.BASE.multiply(hashedSecret)
+        .add(secp.secp256k1.ProjectivePoint.fromHex(recipientPublicKey.slice(2))) // Remove 0x prefix
+        .toRawBytes(true);
 
+    // Compute the Ethereum address of the stealth public key
+    const stealthAddress = ethers.getAddress(
+        ethers.keccak256(ethers.hexlify(stealthPubKey)).slice(26) // Take last 20 bytes
+    );
+    safeLog("Computed stealth address", { stealthAddress });
+
+    // Compute Commitment for Deposit
+    const commitment = poseidon.hash([hashedSecret]);  // Matching circuit commitment
     safeLog("Computing commitment", { commitment: commitment.toString() });
 
+    // Execute Transaction
     const tx = await escrowContract.deposit(commitment, ephemeralPublicKey, {
         value: ethers.parseEther(amount)
     });
+
     safeLog("Transaction sent", { hash: tx.hash });
 
-    // Add after deposit transaction
+    // Verify Deposit
     console.log("Checking stored amount...");
     const storedAmount = await escrowContract.getStoredAmount(commitment);
     console.log("Stored amount:", ethers.formatEther(storedAmount), "ETH");
+
     const exists = await escrowContract.hasCommitment(commitment);
     console.log("Commitment exists:", exists);
 
